@@ -11,26 +11,32 @@ import path from 'path';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import bodyParser from 'body-parser';
-import expressJwt, { UnauthorizedError as Jwt401Error } from 'express-jwt';
+import mongoose from 'mongoose';
 import expressGraphQL from 'express-graphql';
-import jwt from 'jsonwebtoken';
-import fetch from 'node-fetch';
+// import fetch from 'node-fetch';
 import React from 'react';
 import ReactDOM from 'react-dom/server';
 import PrettyError from 'pretty-error';
-import App from './components/App';
+// import App from './components/App';
 import Html from './components/Html';
 import { ErrorPageWithoutStyle } from './routes/error/ErrorPage';
 import errorPageStyle from './routes/error/ErrorPage.css';
-import createFetch from './createFetch';
-import passport from './passport';
-import router from './router';
+// import createFetch from './createFetch';
+// import router from './router';
 import models from './data/models';
 import schema from './data/schema';
-import assets from './assets.json'; // eslint-disable-line import/no-unresolved
+// import assets from './assets.json'; // eslint-disable-line import/no-unresolved
 import config from './config';
 
 const app = express();
+
+mongoose.Promise = require('bluebird');
+// Connect to MongoDB
+mongoose.connect(config.mongo.uri, config.mongo.options);
+mongoose.connection.on('error', err => {
+  console.error(`MongoDB connection error: ${err}`);
+  process.exit(-1); // eslint-disable-line no-process-exit
+});
 
 //
 // Tell any CSS tooling (such as Material UI) to use all vendor prefixes if the
@@ -47,52 +53,21 @@ app.use(cookieParser());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-//
-// Authentication
-// -----------------------------------------------------------------------------
-app.use(
-  expressJwt({
-    secret: config.auth.jwt.secret,
-    credentialsRequired: false,
-    getToken: req => req.cookies.id_token,
-  }),
-);
-// Error handler for express-jwt
-app.use((err, req, res, next) => {
-  // eslint-disable-line no-unused-vars
-  if (err instanceof Jwt401Error) {
-    console.error('[express-jwt-error]', req.cookies.id_token);
-    // `clearCookie`, otherwise user can't use web-app until cookie expires
-    res.clearCookie('id_token');
-  }
-  next(err);
-});
-
-app.use(passport.initialize());
+require('./api').default(app);
 
 if (__DEV__) {
   app.enable('trust proxy');
 }
-app.get(
-  '/login/facebook',
-  passport.authenticate('facebook', {
-    scope: ['email', 'user_location'],
-    session: false,
-  }),
-);
-app.get(
-  '/login/facebook/return',
-  passport.authenticate('facebook', {
-    failureRedirect: '/login',
-    session: false,
-  }),
-  (req, res) => {
-    const expiresIn = 60 * 60 * 24 * 180; // 180 days
-    const token = jwt.sign(req.user, config.auth.jwt.secret, { expiresIn });
-    res.cookie('id_token', token, { maxAge: 1000 * expiresIn, httpOnly: true });
-    res.redirect('/');
-  },
-);
+
+// middleware to set webhost url to the request object.
+app.use((req, res, next) => {
+  let baseUrl = config.baseUrl;
+  if (config.env !== 'production') {
+    baseUrl = `${baseUrl}:${config.port}`;
+  }
+  req.baseurl = baseUrl;
+  next();
+});
 
 //
 // Register API middleware
@@ -111,58 +86,60 @@ app.use(
 // Register server-side rendering middleware
 // -----------------------------------------------------------------------------
 app.get('*', async (req, res, next) => {
-  try {
-    const css = new Set();
-
-    // Global (context) variables that can be easily accessed from any React component
-    // https://facebook.github.io/react/docs/context.html
-    const context = {
-      // Enables critical path CSS rendering
-      // https://github.com/kriasoft/isomorphic-style-loader
-      insertCss: (...styles) => {
-        // eslint-disable-next-line no-underscore-dangle
-        styles.forEach(style => css.add(style._getCss()));
-      },
-      // Universal HTTP client
-      fetch: createFetch(fetch, {
-        baseUrl: config.api.serverUrl,
-        cookie: req.headers.cookie,
-      }),
-    };
-
-    const route = await router.resolve({
-      ...context,
-      path: req.path,
-      query: req.query,
-    });
-
-    if (route.redirect) {
-      res.redirect(route.status || 302, route.redirect);
-      return;
-    }
-
-    const data = { ...route };
-    data.children = ReactDOM.renderToString(
-      <App context={context}>
-        {route.component}
-      </App>,
-    );
-    data.styles = [{ id: 'css', cssText: [...css].join('') }];
-    data.scripts = [assets.vendor.js];
-    if (route.chunks) {
-      data.scripts.push(...route.chunks.map(chunk => assets[chunk].js));
-    }
-    data.scripts.push(assets.client.js);
-    data.app = {
-      apiUrl: config.api.clientUrl,
-    };
-
-    const html = ReactDOM.renderToStaticMarkup(<Html {...data} />);
-    res.status(route.status || 200);
-    res.send(`<!doctype html>${html}`);
-  } catch (err) {
-    next(err);
-  }
+  res.redirect('http://www.google.com');
+  next();
+  // try {
+  //   const css = new Set();
+  //
+  //   // Global (context) variables that can be easily accessed from any React component
+  //   // https://facebook.github.io/react/docs/context.html
+  //   const context = {
+  //     // Enables critical path CSS rendering
+  //     // https://github.com/kriasoft/isomorphic-style-loader
+  //     insertCss: (...styles) => {
+  //       // eslint-disable-next-line no-underscore-dangle
+  //       styles.forEach(style => css.add(style._getCss()));
+  //     },
+  //     // Universal HTTP client
+  //     fetch: createFetch(fetch, {
+  //       baseUrl: config.api.serverUrl,
+  //       cookie: req.headers.cookie,
+  //     }),
+  //   };
+  //
+  //   const route = await router.resolve({
+  //     ...context,
+  //     path: req.path,
+  //     query: req.query,
+  //   });
+  //
+  //   if (route.redirect) {
+  //     res.redirect(route.status || 302, route.redirect);
+  //     return;
+  //   }
+  //
+  //   const data = { ...route };
+  //   data.children = ReactDOM.renderToString(
+  //     <App context={context}>
+  //       {route.component}
+  //     </App>,
+  //   );
+  //   data.styles = [{ id: 'css', cssText: [...css].join('') }];
+  //   data.scripts = [assets.vendor.js];
+  //   if (route.chunks) {
+  //     data.scripts.push(...route.chunks.map(chunk => assets[chunk].js));
+  //   }
+  //   data.scripts.push(assets.client.js);
+  //   data.app = {
+  //     apiUrl: config.api.clientUrl,
+  //   };
+  //
+  //   const html = ReactDOM.renderToStaticMarkup(<Html {...data} />);
+  //   res.status(route.status || 200);
+  //   res.send(`<!doctype html>${html}`);
+  // } catch (err) {
+  //   next(err);
+  // }
 });
 
 //
