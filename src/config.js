@@ -40,6 +40,12 @@ module.exports = {
       `http://localhost:${process.env.PORT || 3000}`,
   },
 
+  // Web analytics
+  analytics: {
+    // https://analytics.google.com/
+    googleTrackingId: process.env.GOOGLE_TRACKING_ID || 'UA-11135514', // UA-XXXXX-X
+  },
+
   // Database
   databaseUrl: process.env.DATABASE_URL || 'sqlite:database.sqlite',
 };

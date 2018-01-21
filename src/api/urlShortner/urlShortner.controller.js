@@ -11,6 +11,13 @@ if (config.env !== 'production') {
 export async function shorten(req, res) {
   const longUrl = req.body.url;
   let shortUrl = '';
+  let type = req.body.type;
+  if (!type) type = 'normal';
+  else if (type !== 'burn')
+    res.json({
+      message:
+        '[Invalid paramter] the value for the parameter type is invalud please check',
+    });
 
   // Finding the urlId
   let lastId = 1;
@@ -28,10 +35,13 @@ export async function shorten(req, res) {
     UrlStore.findOne({ longUrl }, (err, doc) => {
       if (doc) {
         // base58 encode the unique _id of that document and construct the short URL
-      shortUrl = baseUrl + '/' + Base58.encode(doc.urlId); // eslint-disable-line
+        shortUrl = baseUrl + '/' + Base58.encode(doc.urlId); // eslint-disable-line
+        let msg = '';
+        if (doc.type !== type)
+          msg = 'record already exists with a different type';
 
         // since the document exists, we return it without creating a new entry
-        res.json({ shortUrl });
+        res.json({ shortUrl, message: msg });
       } else {
         // The long URL was not found in the long_url field in our urls
         // collection, so we need to create a new entry:
@@ -50,6 +60,7 @@ export async function shorten(req, res) {
                 longUrl,
               },
               {
+                type,
                 urlId: lastId,
                 activeRecord: true,
                 shortUrl: encodeStr,
